@@ -125,66 +125,10 @@ ini_set( 'memory_limit', '256M' ); // Some files may be big
 					return false;
 				}
 
+				$Data = trim( $Data );
+
 				$Data = preg_replace( '/[&\?]v=[a-zA-Z0-9\.\-\_]{3,}/', '?v=valveisgoodatcaching', $Data );
-
-				if( $File === 'Random/About.html' )
-				{
-					$Data = preg_replace( '/<section>\s+<div class="steam_section">.+?<\/section>\r\n/s', '', $Data );
-				}
-				else if( $File === 'Random/People.html' )
-				{
-					libxml_use_internal_errors( true );
-
-					$DOM = new DOMDocument;
-					$DOM->loadHTML( '<?xml encoding="UTF-8">' . $Data );
-					$XPath = new DOMXPath( $DOM );
-
-					$PeopleDivs = $XPath->evaluate( '//div[@class="row person"]' );
-					$AlreadySeen = [];
-					$People = [];
-
-					foreach( $PeopleDivs as $Person )
-					{
-						$Name = $XPath->evaluate( 'string(.//div[@class="name"])', $Person );
-
-						if( isset( $AlreadySeen[ $Name ] ) )
-						{
-							continue;
-						}
-
-						$AlreadySeen[ $Name ] = true;
-
-						$Bio = $XPath->evaluate( 'string(.//p[@class="bio"])', $Person );
-						$LinkElements = $XPath->evaluate( './/a', $Person );
-						$Links = [];
-
-						foreach( $LinkElements as $Link )
-						{
-							$Links[] = $Link->getAttribute( 'href' );
-						}
-
-						$Person =
-						[
-							'name' => trim( $Name ),
-							'bio' => trim( $Bio ),
-						];
-
-						if( !empty( $Links ) )
-						{
-							$Person[ 'links' ] = $Links;
-						}
-
-						$People[] = $Person;
-					}
-
-					$People = array_column( $People, 'name' );
-					array_multisort( $People, SORT_ASC, $People );
-
-					if( !empty( $People ) )
-					{
-						file_put_contents( __DIR__ . '/Random/People.json', json_encode( $People, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT ) );
-					}
-				}
+				
 			}
 			else if( str_ends_with( $File, '.css' ) || str_ends_with( $File, '.js' ) )
 			{
@@ -203,62 +147,14 @@ ini_set( 'memory_limit', '256M' ); // Some files may be big
 				mkdir( $Folder, 0755, true );
 			}
 
-			if(
-				str_ends_with( $File, 'english-json.js' ) ||
-				str_starts_with( $OriginalFile, 'www.underlords.com/' ) ||
-				str_starts_with( $OriginalFile, 'www.dota2.com/' ) ||
-				str_starts_with( $OriginalFile, 'www.counter-strike.net/' ) ||
-				str_starts_with( $OriginalFile, 'Scripts/WebUI/steammobile' ) ||
-				str_contains( $OriginalFile, '/webui/' ) ||
-				str_contains( $OriginalFile, '/legacy_web/' ) ||
-				str_contains( $OriginalFile, '/applications/' )
-			)
-			{
-				$HashPath = $OriginalFile . '.unmodified';
-				$Hash = hash( 'sha256', $Data );
-
-				if( ( $this->ETags[ $HashPath ] ?? '' ) === $Hash )
-				{
-					return false;
-				}
-
-				$this->ETags[ $HashPath ] = $Hash;
-
-				// Extract json so it gets pretty printed from the json.parse
-				if( str_ends_with( $File, 'english-json.js' ) && preg_match( "/exports=JSON\.parse\('(.+)'\)}}]\);$/", $Data, $Matches ) )
-				{
-					$Data = stripcslashes( $Matches[ 1 ] );
-					$Data = json_decode( $Data, true );
-					$Data = json_encode( $Data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT ) . PHP_EOL;
-
-					file_put_contents( str_replace( '-json.js', '.json', $File ), $Data );
-
-					return true;
-				}
-
-				file_put_contents( $File, $Data );
-
-				if( str_ends_with( $File, '.js' ) )
-				{
-					if( str_ends_with( $File, '/manifest.js' ) )
-					{
-						$this->UpdateManifestUrls = true;
-					}
-
-					$this->DumpJavascriptFiles = true;
-				}
-
-				system( 'npm run prettier ' . escapeshellarg( $File ) );
-
-				return true;
-			}
-
 			if( file_exists( $File ) && $Data === file_get_contents( $File ) )
 			{
 				return false;
 			}
 
 			file_put_contents( $File, $Data );
+
+			system( 'npx prettier --write' . escapeshellarg( $File ) );
 
 			return true;
 		}
@@ -503,85 +399,6 @@ ini_set( 'memory_limit', '256M' ); // Some files may be big
 			return $Urls;
 		}
 
-		/**
-		 * @param string[] $KnownUrls
-		 *
-		 * @return array<int, array{URL: string, File: string}>
-		 */
-		private function ProcessManifests( array $KnownUrls ) : array
-		{
-			system( 'node generate_manifest_urls.mjs' );
-
-			$URLsToFetch = [];
-			$ManifestUrlsPath = __DIR__ . '/.support/urls_from_manifests.txt';
-
-			if( !file_exists( $ManifestUrlsPath ) )
-			{
-				throw new Exception( $ManifestUrlsPath . ' does not exist' );
-			}
-
-			$ManifestUrls = file( $ManifestUrlsPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES );
-			$ManifestUrls = array_diff( $ManifestUrls, $KnownUrls );
-
-			foreach( $ManifestUrls as $Url )
-			{
-				if( !str_starts_with( $Url, 'https://' ) )
-				{
-					throw new Exception( $Url . ' does not start with https://' );
-				}
-
-				$QuestionMark = strrpos( $Url, '?' );
-
-				if( $QuestionMark === false )
-				{
-					throw new Exception( $Url . ' does not contain a question mark' );
-				}
-
-				$URLsToFetch[] =
-				[
-					'URL'  => $Url,
-					'File' => substr( $Url, 8, $QuestionMark - 8 ),
-				];
-			}
-
-			// Find and delete old chunk~ files
-			$Folders = [];
-
-			foreach( $URLsToFetch as $Url )
-			{
-				$Filename = basename( $Url[ 'File' ] );
-
-				if( str_starts_with( $Filename, 'chunk~' ) )
-				{
-					$Folder = __DIR__ . '/' . dirname( $Url[ 'File' ] ) . '/';
-
-					if( !isset( $Folders[ $Folder ] ) )
-					{
-						$Folders[ $Folder ] = [];
-					}
-
-					$Folders[ $Folder ][ $Filename ] = true;
-				}
-			}
-
-			foreach( $Folders as $Folder => $NewChunks )
-			{
-				foreach( glob( $Folder . 'chunk~*' ) as $FilepathOnDisk )
-				{
-					$Filename = basename( $FilepathOnDisk );
-
-					if( !isset( $NewChunks[ $Filename ] ) )
-					{
-						$this->Log( 'Chunk ' . $FilepathOnDisk . ' no longer exists in manifest' );
-
-						unlink( $FilepathOnDisk );
-					}
-				}
-			}
-
-			return $URLsToFetch;
-		}
-
 		private function Log( string $String ) : void
 		{
 			$Log  = '[';
@@ -590,8 +407,6 @@ ini_set( 'memory_limit', '256M' ); // Some files may be big
 			$Log .= $String;
 			$Log .= '{normal}';
 			$Log .= PHP_EOL;
-
-			$Log = str_replace( $this->APIKey, '{lightred}*APIKEY*{normal}', $Log );
 
 			$Log = str_replace(
 				[
