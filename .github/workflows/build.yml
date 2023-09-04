@@ -14,13 +14,14 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       packages: write
+      contents: read
     env:
-      TITLE: Docker-PHP-Git
-      GHCR_SLUG: ghcr.io/lifeismana/git_tracking
+      TITLE: Git-Tracking
+      GHCR_SLUG: ghcr.io/lifeismana/git-tracking
     steps:
       -
         name: Checkout
-        uses: actions/checkout@v3.0.2
+        uses: actions/checkout@v3.6.0
       -
         name: Repo metadata
         id: repo
@@ -45,7 +46,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       -
         name: Build and push latest
-        uses: docker/build-push-action@v3.1.1
+        uses: docker/build-push-action@v3.3.1
         with:
           target: latest
           platforms: |
