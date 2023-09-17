@@ -14,8 +14,8 @@ ini_set( 'memory_limit', '256M' ); // Some files may be big
 	class Tracker
 	{
 		private float $AppStart;
-		private int $CurrentTime;
 		private bool $UseCache = true;
+		private string $DIR = getcwd(); //this should probably be __DIR__ when we're not in docker
 
 		/** @var array<string, string|array<int, string>> */
 		private array $ETags = [];
@@ -50,14 +50,13 @@ ini_set( 'memory_limit', '256M' ); // Some files may be big
 				$this->UseCache = false;
 			}
 
-			$ETagsPath  = __DIR__ . '/etags.json';
+			$ETagsPath  = $this->DIR . '/etags.json';
 
 			if( $this->UseCache && file_exists( $ETagsPath ) )
 			{
 				$this->ETags = json_decode( file_get_contents( $ETagsPath ), true );
 			}
 
-			$this->CurrentTime = time( );
 
 			$this->URLsToFetch = $this->ParseUrls( );
 			$KnownUrls = [];
@@ -102,18 +101,9 @@ ini_set( 'memory_limit', '256M' ); // Some files may be big
 			// Unzip it
 			if( str_ends_with( $File, '.zip' ) )
 			{
-				if( hash( 'sha1', $Data ) !== $this->ClientArchiveHashes[ $File ] )
-				{
-					$this->Log( '{lightred}Checksum mismatch for ' . $File );
-
-					return false;
-				}
-
-				$File = __DIR__ . '/' . $File;
+				$File = $this->DIR . '/' . $File;
 
 				file_put_contents( $File, $Data );
-
-				$this->ExtractClientArchives = true;
 
 				return true;
 			}
@@ -126,17 +116,10 @@ ini_set( 'memory_limit', '256M' ); // Some files may be big
 				}
 
 				$Data = trim( $Data );
-
-				$Data = preg_replace( '/[&\?]v=[a-zA-Z0-9\.\-\_]{3,}/', '?v=valveisgoodatcaching', $Data );
-				
-			}
-			else if( str_ends_with( $File, '.css' ) || str_ends_with( $File, '.js' ) )
-			{
-				$Data = preg_replace( '/(\.(?:js|png|jpg|svg|css)[&\?]v=)[a-zA-Z0-9\.\-\_]{3,}/i', '$1valveisgoodatcaching', $Data );
 			}
 
 			$OriginalFile = $File;
-			$File = __DIR__ . DIRECTORY_SEPARATOR . $File;
+			$File = $this->DIR . DIRECTORY_SEPARATOR . $File;
 
 			$Folder = dirname( $File );
 
@@ -344,7 +327,7 @@ ini_set( 'memory_limit', '256M' ); // Some files may be big
 		/** @return array<int, array{URL: string, File: string}> */
 		private function ParseUrls() : array
 		{
-			$UrlsPath = __DIR__ . '/urls.txt';
+			$UrlsPath = $this->DIR . '/urls.txt';
 
 			if( !file_exists( $UrlsPath ) )
 			{
