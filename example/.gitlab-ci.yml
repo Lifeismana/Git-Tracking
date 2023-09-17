@@ -1,0 +1,24 @@
+track-update:
+    image: ghcr.io/lifeismana/git-tracking:latest
+    stage: deploy
+    resource_group: tracking
+    only:
+        - web
+        - schedules
+    cache:
+        key: $CI_COMMIT_REF_SLUG
+        paths:
+            - etags.json
+    before_script:
+        - mkdir ~/.ssh/
+        - echo "${CI_KNOWN_HOSTS}" > ~/.ssh/known_hosts
+        - echo "${SSH_PUSH_KEY}" > ~/.ssh/id_ed25519
+        - chmod 600 ~/.ssh/id_ed25519
+        - git config user.email "$GIT_MAIL"
+        - git config user.name "$GIT_USERNAME"
+        - git remote set-url origin "git@$CI_SERVER_HOST:$CI_PROJECT_PATH.git"
+    script:
+        - php /opt/git-tracking/update.php force
+        - git add -A
+        - git diff-index --quiet HEAD || git commit -a -m "$(git status --porcelain | wc -l) files | $(git status --porcelain|awk '{print "basename " $2}'| sh | sed '{:q;N;s/\n/, /g;t q}')"
+        - git push origin HEAD:${CI_COMMIT_REF_NAME} || true
