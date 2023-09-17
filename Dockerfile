@@ -27,4 +27,6 @@ RUN set -eux; \
     echo "error_log = /var/log/php_cli_errors.log" >> /etc/php/${PHP_VERSION}/cli/php.ini; \
     touch /var/log/php_cli_errors.log; \
     addgroup --gid $app_group_id groupphp; \
-    useradd --uid $app_user_id --gid $app_group_id -m userphp ; \
+    useradd --uid $app_user_id --gid $app_group_id -m userphp ;
+
+COPY update.php /opt/git-tracking/
