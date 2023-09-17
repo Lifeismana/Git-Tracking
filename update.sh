@@ -9,8 +9,6 @@ fi
 
 echo $$ > $LOCKFILE
 
-#mkdir -p .support/{archives,bins,linux_archives,linux_bins,steampal_archives}
-
 php update.php "$1"
 
 git add -A
